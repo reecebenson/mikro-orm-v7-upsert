@@ -2,8 +2,9 @@ import { MikroORM } from "@mikro-orm/sqlite";
 import { defineEntity, p } from "@mikro-orm/core";
 import { v4 } from "uuid";
 
-const UserSchema = defineEntity({
-  name: "User",
+const BaseSchema = defineEntity({
+  name: "Base",
+  abstract: true,
   properties: {
     id: p
       .string()
@@ -15,13 +16,34 @@ const UserSchema = defineEntity({
       .datetime()
       .onCreate(() => new Date())
       .onUpdate(() => new Date()),
+  },
+});
+
+const UserSchema = defineEntity({
+  name: "User",
+  extends: BaseSchema,
+  properties: {
     email: p.string().unique().index(),
     name: p.string(),
   },
 });
 
-export class User extends UserSchema.class {
-  name: string = "";
+type AbstractCtor<T = {}> = abstract new (...args: any[]) => T;
+type AnyCtor<T = {}> = new (...args: any[]) => T;
+
+function WithBaseFields<TBase extends AbstractCtor>(
+  Base: TBase,
+): AnyCtor<InstanceType<TBase>>;
+function WithBaseFields<TBase extends AnyCtor>(Base: TBase) {
+  return class extends Base {
+    id = "foobarbaz";
+    createdAt = new Date();
+    updatedAt = new Date();
+  };
+}
+
+export class User extends WithBaseFields(UserSchema.class) {
+  name = "";
 }
 UserSchema.setClass(User);
 
@@ -50,7 +72,7 @@ test("basic CRUD example", async () => {
   orm.em.clear();
 
   const user = await orm.em.findOneOrFail(User, { email: "foo" });
-  expect(user.id).toBe(expect.any(String));
+  expect(user.id).toEqual(expect.any(String));
 
   user.name = "Bar";
   orm.em.remove(user);
